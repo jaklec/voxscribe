@@ -32,8 +32,10 @@ model_path = "~/.local/share/notetaker/models"
 model = "large-v3-turbo-q5_0"
 ```
 
-If no config file exists, these defaults are used. All values can be overridden
-via CLI flags.
+If no config file exists, these defaults are used. The tool does not create a
+config file automatically — defaults are hardcoded. Tilde (`~`) in config paths
+is expanded to the user's home directory at runtime via `dirs::home_dir()`.
+All values can be overridden via CLI flags.
 
 ## Architecture
 
@@ -69,6 +71,7 @@ completes.
   `crossterm`, reads keyboard input on the main thread, displays elapsed time
   and status (`Recording...`, `Paused`, `Transcribing...`). Sends commands to
   the recorder via channel. Keybindings: `[space]` pause/resume, `[q]` stop.
+  The elapsed timer shows only active recording time (pauses are not counted).
 - **output** — Writes the transcription text to the resolved output file path.
 
 ### Interactive Session Flow
@@ -85,8 +88,11 @@ completes.
 
 ### Non-Interactive Flow
 
-1. Same recording setup but no UI — Ctrl+C triggers stop via signal handler.
-2. Saves the WAV file to the output location. No auto-transcribe.
+1. Same recording setup but no UI — Ctrl+C triggers stop via `ctrlc` crate
+   signal handler (since there is no raw terminal mode to capture key events).
+2. Saves the WAV file to the output location with timestamp-based naming
+   (e.g. `2026-03-20T14-30-00.wav`). The `--output` flag controls the WAV
+   file destination in this mode. No auto-transcribe.
 
 ### Transcribe Subcommand Flow
 
@@ -96,10 +102,15 @@ completes.
 ## Recording & Audio
 
 - **Library:** `cpal` (standard Rust audio I/O, macOS CoreAudio backend).
-- **Format:** WAV, 16-bit PCM, 16kHz, mono. Recorded directly in this format
-  to avoid conversion.
+- **Format:** WAV, 16-bit PCM, 16kHz, mono — whisper.cpp's expected input.
+- **Sample rate handling:** macOS CoreAudio typically exposes devices at their
+  native sample rate (44.1kHz or 48kHz). `cpal` does not resample. The recorder
+  must capture at the device's native sample rate and resample to 16kHz before
+  writing the WAV. Use the `rubato` crate for high-quality resampling.
 - **Temp storage:** `tempfile` crate. On completion, either moved to output
-  location (`--keep-audio`) or deleted after transcription.
+  location (`--keep-audio`) or deleted after transcription. Note: `hound`'s
+  `WavWriter` calls `finalize()` on drop, so abrupt termination (SIGKILL) will
+  still produce a valid WAV header in most cases.
 - **Pause behavior:** The `cpal` audio callback discards incoming samples while
   paused. The audio stream stays open to avoid device re-initialization on
   resume.
@@ -108,10 +119,19 @@ completes.
 
 - **Library:** `whisper-rs` with the `coreml` feature flag enabled for Neural
   Engine acceleration on Apple Silicon.
+- **Build prerequisites:** Xcode command-line tools must be installed (required
+  for linking CoreML and Accelerate frameworks).
 - **Default model:** Large v3 Turbo quantized (`q5_0`).
-- **Model download:** The `download-model` subcommand fetches from Hugging Face
-  into the configured `model_path` directory. Shows a progress bar via
-  `indicatif`.
+- **CoreML model assets:** Enabling CoreML requires a compiled `.mlmodelc`
+  directory alongside the standard `.bin` weights. The `download-model`
+  subcommand must fetch both the GGML weights and the pre-built CoreML model
+  assets from Hugging Face. If CoreML assets are missing at runtime, whisper-rs
+  falls back to Metal/CPU — the tool should warn when this happens.
+- **Model download:** The `download-model` subcommand fetches from the
+  `ggerganov/whisper.cpp` Hugging Face repository into the configured
+  `model_path` directory. Shows a progress bar via `indicatif`. Supported
+  models: `large-v3-turbo-q5_0` (default), `large-v3-turbo`, `large-v3`,
+  `medium`, `base`, `small`, `tiny`.
 - **Process:** Load model, feed WAV file, extract text segments, concatenate
   into plain text output.
 
@@ -119,7 +139,9 @@ completes.
 
 - **Default format:** Plain text (`.txt`).
 - **File naming:** Timestamp-based, e.g. `2026-03-20T14-30-00.txt`.
-- **Location:** Configured `output_dir`, overridable via `--output` flag.
+- **Location:** Configured `output_dir`, overridable via `--output` flag. If
+  `--output` points to a directory, auto-generate the filename in that
+  directory. If it points to a file path, use it as-is.
 - **Future:** JSON output with timestamps and segments (not in v1).
 
 ## Error Handling
@@ -131,10 +153,11 @@ completes.
 - **Empty recording:** If stopped within < 1 second, skip transcription and
   warn.
 - **Disk/write errors:** Propagated via `anyhow` for ergonomic error chains.
-- **Ctrl+C in interactive mode:** Treated as stop — finalize WAV and
-  transcribe.
-- **Ctrl+C in non-interactive mode:** Stop recording and save WAV, no
-  transcription.
+- **Ctrl+C in interactive mode:** In raw mode, `crossterm` captures Ctrl+C as a
+  key event. Treated as stop — finalize WAV and transcribe (same as pressing
+  `[q]`).
+- **Ctrl+C in non-interactive mode:** Caught via `ctrlc` crate signal handler.
+  Stop recording and save WAV, no transcription.
 
 ## Dependencies
 
@@ -143,11 +166,13 @@ completes.
 | `clap`                       | CLI argument parsing                 |
 | `serde` + `toml`            | Config file parsing                  |
 | `cpal`                       | Audio capture                        |
+| `rubato`                     | Audio resampling (native rate → 16kHz) |
 | `hound`                      | WAV file writing                     |
 | `whisper-rs` (coreml)       | Transcription via whisper.cpp        |
 | `crossterm`                  | Raw terminal input for key handling  |
 | `indicatif`                  | Progress bars                        |
 | `anyhow`                     | Error handling                       |
+| `ctrlc`                      | Signal handling (non-interactive mode)|
 | `tempfile`                   | Temp WAV storage                     |
 | `dirs`                       | Resolve standard directories         |
 
