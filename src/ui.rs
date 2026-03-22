@@ -26,9 +26,9 @@ impl Drop for RawModeGuard {
 pub fn run_interactive(recorder: Recorder) -> Result<PathBuf> {
     let handle = crate::recorder::start_recording(recorder)?;
 
-    let _raw_guard = RawModeGuard::enable()?;
+    let raw_guard = RawModeGuard::enable()?;
     let result = interactive_loop(&handle);
-    drop(_raw_guard);
+    drop(raw_guard);
 
     eprint!("\r\x1b[K");
 

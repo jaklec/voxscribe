@@ -39,18 +39,18 @@ fn cmd_record(config: &AppConfig, args: &cli::RecordArgs) -> Result<()> {
         ui::run_interactive(recorder)?
     };
 
-    let duration = recorder::wav_duration(&wav_path)?;
-    if duration < 1.0 {
-        eprintln!("Recording too short (< 1 second), skipping transcription.");
-        std::fs::remove_file(&wav_path).ok();
-        return Ok(());
-    }
-
     if args.no_interact {
         let dest = output::resolve_audio_path(config, args);
         std::fs::rename(&wav_path, &dest)?;
         println!("{}", dest.display());
     } else {
+        let duration = recorder::wav_duration(&wav_path)?;
+        if duration < 1.0 {
+            eprintln!("Recording too short (< 1 second), skipping transcription.");
+            std::fs::remove_file(&wav_path).ok();
+            return Ok(());
+        }
+
         let text = transcriber::transcribe(&model_path, &wav_path)?;
         let out_path = output::resolve_output_path(config, args.output.as_deref());
         output::write_transcription(&out_path, &text)?;
