@@ -156,7 +156,7 @@ pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
                         resample_buffer.extend_from_slice(&mono);
                         write_resampled(r, &mut resample_buffer, &mut writer)?;
                     } else {
-                        write_samples(&mono, &mut writer);
+                        write_samples(&mono, &mut writer)?;
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -171,7 +171,7 @@ pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
                 resample_buffer.extend_from_slice(&mono);
                 write_resampled(r, &mut resample_buffer, &mut writer)?;
             } else {
-                write_samples(&mono, &mut writer);
+                write_samples(&mono, &mut writer)?;
             }
         }
 
@@ -188,7 +188,6 @@ pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
 }
 
 pub fn run_non_interactive(recorder: Recorder) -> Result<PathBuf> {
-    let wav_path = recorder.wav_path().to_path_buf();
     let handle = start_recording(recorder)?;
 
     let stop_flag = std::sync::Arc::new(AtomicBool::new(false));
@@ -202,8 +201,7 @@ pub fn run_non_interactive(recorder: Recorder) -> Result<PathBuf> {
         std::thread::sleep(Duration::from_millis(100));
     }
 
-    handle.stop()?;
-    Ok(wav_path)
+    handle.stop()
 }
 
 fn to_mono(samples: &[f32], channels: usize) -> Vec<f32> {
@@ -238,17 +236,21 @@ fn write_resampled(
     while buffer.len() >= chunk_size {
         let chunk: Vec<f32> = buffer.drain(..chunk_size).collect();
         let output = resampler.process(&[chunk], None)?;
-        write_samples(&output[0], writer);
+        write_samples(&output[0], writer)?;
     }
     Ok(())
 }
 
-fn write_samples(samples: &[f32], writer: &mut WavWriter<std::io::BufWriter<std::fs::File>>) {
+fn write_samples(
+    samples: &[f32],
+    writer: &mut WavWriter<std::io::BufWriter<std::fs::File>>,
+) -> Result<()> {
     for &sample in samples {
         let clamped = sample.clamp(-1.0, 1.0);
         let value = (clamped * i16::MAX as f32) as i16;
-        let _ = writer.write_sample(value);
+        writer.write_sample(value)?;
     }
+    Ok(())
 }
 
 pub fn wav_duration(path: &Path) -> Result<f64> {
@@ -298,7 +300,7 @@ mod tests {
             sample_format: hound::SampleFormat::Int,
         };
         let mut writer = WavWriter::create(&path, spec).unwrap();
-        write_samples(&[2.0, -2.0, 0.5], &mut writer);
+        write_samples(&[2.0, -2.0, 0.5], &mut writer).unwrap();
         writer.finalize().unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();

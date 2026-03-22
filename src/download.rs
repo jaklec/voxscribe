@@ -69,10 +69,10 @@ fn download_file(url: &str, dest: &Path) -> Result<()> {
             .progress_chars("#>-"),
     );
 
-    let mut file = std::fs::File::create(dest).context("Failed to create destination file")?;
-
-    let content = response.bytes().context("Failed to read response")?;
-    std::io::Write::write_all(&mut file, &content)?;
+    let mut file = std::io::BufWriter::new(
+        std::fs::File::create(dest).context("Failed to create destination file")?,
+    );
+    std::io::copy(&mut pb.wrap_read(response), &mut file)?;
     pb.finish_with_message("Done");
 
     Ok(())

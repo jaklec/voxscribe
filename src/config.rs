@@ -42,18 +42,10 @@ impl AppConfig {
     pub fn merge_cli(mut self, cli: &Cli) -> Self {
         use crate::cli::Command;
 
-        match &cli.command {
-            Command::Record(args) => {
-                if let Some(ref audio_dir) = args.audio_dir {
-                    self.output_dir = audio_dir.to_string_lossy().to_string();
-                }
+        if let Command::DownloadModel(args) = &cli.command {
+            if let Some(ref model) = args.model {
+                self.model = model.clone();
             }
-            Command::DownloadModel(args) => {
-                if let Some(ref model) = args.model {
-                    self.model = model.clone();
-                }
-            }
-            _ => {}
         }
         self
     }
