@@ -9,6 +9,7 @@ pub fn transcribe(model_path: &Path, wav_path: &Path) -> Result<String> {
     )
     .context("Failed to load whisper model")?;
 
+    #[cfg(feature = "coreml")]
     if !has_coreml_assets(model_path) {
         eprintln!(
             "Warning: CoreML model assets not found. Falling back to Metal/CPU. \
@@ -78,6 +79,7 @@ fn read_wav_samples(path: &Path) -> Result<Vec<f32>> {
     Ok(samples)
 }
 
+#[cfg(any(feature = "coreml", test))]
 fn has_coreml_assets(model_path: &Path) -> bool {
     let model_dir = model_path.parent().unwrap_or(Path::new("."));
     let stem = model_path

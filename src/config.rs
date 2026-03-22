@@ -82,6 +82,7 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 
 fn config_file_path() -> PathBuf {
     dirs::config_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
         .unwrap_or_else(|| PathBuf::from(".config"))
         .join("notetaker")
         .join("config.toml")

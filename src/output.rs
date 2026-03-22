@@ -21,8 +21,7 @@ pub fn resolve_output_path(config: &AppConfig, output_override: Option<&Path>) -
 pub fn resolve_audio_path(config: &AppConfig, args: &RecordArgs) -> PathBuf {
     let dir = args
         .audio_dir
-        .as_deref()
-        .map(|p| p.to_path_buf())
+        .clone()
         .unwrap_or_else(|| config.resolved_output_dir());
     dir.join(timestamp_filename("wav"))
 }

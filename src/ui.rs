@@ -24,20 +24,18 @@ impl Drop for RawModeGuard {
 }
 
 pub fn run_interactive(recorder: Recorder) -> Result<PathBuf> {
-    let wav_path = recorder.wav_path().to_path_buf();
     let handle = crate::recorder::start_recording(recorder)?;
 
     let _raw_guard = RawModeGuard::enable()?;
     let result = interactive_loop(&handle);
     drop(_raw_guard);
 
-    // Clear the status line
     eprint!("\r\x1b[K");
 
     match result {
         Ok(()) => {
             eprintln!("Transcribing...");
-            handle.stop()?;
+            let wav_path = handle.stop()?;
             Ok(wav_path)
         }
         Err(e) => {

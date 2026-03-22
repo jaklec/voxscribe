@@ -59,15 +59,24 @@ fn download_file(url: &str, dest: &Path) -> Result<()> {
         .error_for_status()
         .context("Download failed")?;
 
-    let total_size = response.content_length().unwrap_or(0);
-
-    let pb = indicatif::ProgressBar::new(total_size);
-    pb.set_style(
-        indicatif::ProgressStyle::default_bar()
-            .template("{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let pb = if let Some(total_size) = response.content_length() {
+        let pb = indicatif::ProgressBar::new(total_size);
+        pb.set_style(
+            indicatif::ProgressStyle::default_bar()
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb
+    } else {
+        let pb = indicatif::ProgressBar::new_spinner();
+        pb.set_style(
+            indicatif::ProgressStyle::default_spinner()
+                .template("{spinner:.green} {bytes} downloaded")
+                .unwrap(),
+        );
+        pb
+    };
 
     let part_path = dest.with_extension("bin.part");
     let mut file = std::io::BufWriter::new(

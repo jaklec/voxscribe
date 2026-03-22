@@ -19,7 +19,7 @@ pub struct Recorder {
     device: cpal::Device,
     device_config: cpal::SupportedStreamConfig,
     temp_path: PathBuf,
-    _temp_file: tempfile::NamedTempFile,
+    _temp_file: tempfile::TempPath,
 }
 
 impl Recorder {
@@ -37,18 +37,14 @@ impl Recorder {
             .suffix(".wav")
             .tempfile()
             .context("Failed to create temp file")?;
-        let temp_path = temp_file.path().to_path_buf();
+        let temp_path = temp_file.into_temp_path();
 
         Ok(Self {
             device,
             device_config,
-            temp_path,
-            _temp_file: temp_file,
+            temp_path: temp_path.to_path_buf(),
+            _temp_file: temp_path,
         })
-    }
-
-    pub fn wav_path(&self) -> &Path {
-        &self.temp_path
     }
 }
 
@@ -56,8 +52,8 @@ pub struct RecordingHandle {
     paused: std::sync::Arc<AtomicBool>,
     writer_thread: Option<std::thread::JoinHandle<Result<PathBuf>>>,
     stop_flag: std::sync::Arc<AtomicBool>,
-    // Stream must stay alive on the thread that created it (not Send)
     _stream: cpal::Stream,
+    _temp_file: tempfile::TempPath,
 }
 
 impl RecordingHandle {
@@ -93,6 +89,7 @@ impl Drop for RecordingHandle {
 }
 
 pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
+    let temp_file = recorder._temp_file;
     let wav_path = recorder.temp_path.clone();
     let native_rate = recorder.device_config.sample_rate().0;
     let channels = recorder.device_config.channels() as usize;
@@ -121,8 +118,7 @@ pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
             &stream_config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
                 if !paused_callback.load(Ordering::Relaxed) {
-                    let floats: Vec<f32> =
-                        data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
+                    let floats: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
                     let _ = samples_tx.send(floats);
                 }
             },
@@ -193,6 +189,7 @@ pub fn start_recording(recorder: Recorder) -> Result<RecordingHandle> {
         writer_thread: Some(writer_thread),
         stop_flag,
         _stream: stream,
+        _temp_file: temp_file,
     })
 }
 
