@@ -22,5 +22,10 @@ log = "0.4"
 env_logger = "0.11"
 whisper-rs = { version = "0.14", features = ["log_backend"] }
 
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+
 [features]
 coreml = ["whisper-rs/coreml"]
