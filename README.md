@@ -7,13 +7,14 @@ Record and transcribe audio locally using [whisper.cpp](https://github.com/ggerg
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) — install via `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- [just](https://github.com/casey/just) — install via `brew install just` (macOS) or see [installation docs](https://github.com/casey/just#installation)
 
 ### Install
 
 ```sh
 git clone <repo-url>
 cd voxscribe
-cargo install --path .
+just install
 ```
 
 Then download the whisper model:
@@ -34,10 +35,6 @@ voxscribe transcribe audio.wav  # transcribe an existing file
 Transcriptions are saved to `~/transcriptions/` by default.
 
 ## Development
-
-### Prerequisites
-
-- [just](https://github.com/casey/just) — install via `brew install just` (macOS) or see [installation docs](https://github.com/casey/just#installation)
 
 ### Setup
 
